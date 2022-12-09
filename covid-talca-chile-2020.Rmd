@@ -1,0 +1,286 @@
+---
+title: "Covid Talca, Chile, 2020"
+author: "Bernardo Pezo"
+date: "13-11-2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Análisis sobre el aumento de casos confirmados activos de Covid detectados durante el año 2020, comparando los registros correspondientes a la comuna de Talca con comunas de similar población (+/- 50.000 habitantes) y comunas cercanas.
+
+Se define el periodo 2020 en base a la existencia de datos consolidados, revisados, de origen oficial y públicos.
+
+## Objetivo
+
+Observar el aumento de casos confirmados de Covid desde el primer caso detectado en Chile el 3 de Marzo del 2020, hasta el término del mismo año.
+
+Verificar que existe un comportamiento similar en el aumento de casos confirmados entre comunas cercanas geográficamente y en cantidad de habitantes, con especial enfoque en el comportamiento de la comuna de Talca.
+
+## Preparación
+
+Para el análisis se usarán las librerías:
+
+### tidyvserse
+
+```{r import_tidyvserse}
+library(tidyverse)
+```
+### ggplot2
+
+```{r import_ggplot2}
+library(ggplot2)
+```
+
+## Datos
+
+Datos obtenidos desde el Ministerio de Ciencia y producidos por el Ministerio de Salud (o la fuente que corresponda) https://github.com/MinCiencia/Datos-COVID19
+
+Los datos en los que se enfoca el análisis corresponden al siguiente conjunto:
+
+### Casos confimados activos acumulados.
+
+Conjunto con cantidad acumulada de casos confirmados activos registrados por fecha y comuna.
+
+```{r casos_activos}
+casos_activos <- read.csv("data/casos_activos.csv")
+str(casos_activos)
+```
+
+Quitar registros sin fecha, casos registrados, comuna ni población.
+
+```{r casos_activos_filter, results='hide'}
+casos_activos <- filter(casos_activos, 
+    casos_activos$Fecha != "" & 
+    casos_activos$Poblacion != "" & 
+    casos_activos$Comuna != "" & 
+    casos_activos$Casos.Confirmados != "" &
+    casos_activos$Casos.Confirmados != "-"
+)
+```
+
+Normalizar fechas al formato YYYY-MM-DD, población y número de casos como datos tipo enteros.
+
+```{r casos_activos_normal, results='hide'}
+casos_activos$Fecha <- gsub('/', '-', casos_activos$Fecha)
+casos_activos$Fecha <- as.Date(casos_activos$Fecha, format = "%Y-%m-%d")
+casos_activos$Casos.Confirmados <- as.numeric(
+  as.character(casos_activos$Casos.Confirmados)
+)
+casos_activos$Poblacion <- as.numeric(
+  as.character(casos_activos$Poblacion)
+)
+```
+
+Recuperar el valor de la población de la comuna de Talca.
+
+```{r casos_activos_get_problacion}
+poblacion_talca <- filter(casos_activos, 
+  casos_activos$Comuna == 'Talca'
+)
+poblacion_talca <- poblacion_talca$Poblacion[1]
+print(poblacion_talca)
+```
+
+Filtrar solo registros del año 2020, comunas con poblaciones similares a la de Talca y comunas cercanas a Talca.
+
+Comunas consideradas como cercanas:
+
+  * Talca
+  * San Clemente
+  * Maule
+  * San Javier
+  * Pencahue
+  * San Rafael
+  * Pelarco
+
+```{r casos_activos_filter_fecha, results='hide'}
+casos_activos <- filter(casos_activos, 
+  casos_activos$Fecha >= '2020-01-01' & 
+  casos_activos$Fecha <= '2020-12-31' &
+  (
+    (
+      casos_activos$Poblacion >= (poblacion_talca - 50000) &
+      casos_activos$Poblacion <= (poblacion_talca + 50000)
+    ) |
+    (
+      casos_activos$Region == 'Maule' & 
+        (
+          casos_activos$Comuna == 'Talca' |
+          casos_activos$Comuna == 'San Clemente' |
+          casos_activos$Comuna == 'Maule' |
+          casos_activos$Comuna == 'San Javier' |
+          casos_activos$Comuna == 'Pencahue' |
+          casos_activos$Comuna == 'San Rafael' |
+          casos_activos$Comuna == 'Pelarco'
+        )
+    )
+  )
+)
+```
+
+Ordenar por fecha y cantidad de casos confirmados.
+
+```{r casos_activos_order, results='hide'}
+casos_activos <- arrange(casos_activos, Fecha, Casos.Confirmados)
+```
+
+Vista previa del conjunto de datos resultantes.
+
+```{r casos_activos_preview}
+glimpse(casos_activos)
+```
+
+Subconjunto de datos contemplando solo la comuna de Talca.
+
+```{r casos_activos_filter_talca, results='hide'}
+casos_activos_talca <- filter(casos_activos, 
+  casos_activos$Comuna == "Talca"
+)
+```
+
+Subconjunto de datos contemplando solo comunas con poblaciones similares a la de Talca.
+
+```{r casos_activos_filter_poblacion}
+casos_activos_poblacion <- filter(casos_activos, 
+  casos_activos$Poblacion >= (poblacion_talca - 50000) &
+  casos_activos$Poblacion <= (poblacion_talca + 50000) &
+  casos_activos$Comuna != 'Talca'
+)
+```
+
+Subconjunto de datos contemplando solo comunas cercanas a Talca.
+
+```{r casos_activos_filter_cercano}
+casos_activos_cercano <- filter(casos_activos, 
+  casos_activos$Region == 'Maule' & 
+  casos_activos$Comuna != 'Talca' &
+    (
+      casos_activos$Comuna == 'San Clemente' |
+      casos_activos$Comuna == 'Maule' |
+      casos_activos$Comuna == 'San Javier' |
+      casos_activos$Comuna == 'Pencahue' |
+      casos_activos$Comuna == 'San Rafael' |
+      casos_activos$Comuna == 'Pelarco'
+    )
+)
+```
+
+## Análisis
+
+Comparación en la variación de casos confirmados detectados entre la comuna de Talca y comunas con similar cantidad de habitantes y cercanas geográficamente.
+
+### Todas las comunas filtradas
+
+Gráfico que muestra los casos confirmados durante el año 2020 en todas las comunas filtradas
+
+```{r casos_activos_graf}
+ggplot(data = casos_activos, aes(x = Fecha, y = Casos.Confirmados, group = Comuna, colour = Comuna)) +
+  geom_line(show.legend = FALSE) +
+  scale_x_date(date_breaks = "1 month", date_minor_breaks = "1 week", date_labels = "%d-%m-%Y") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  labs(title = "Casos confirmados por fecha",
+    subtitle = paste0("Datos registrados durante el 2020."),
+    x = "Fecha del registro",
+    y = "Casos confirmados")
+```
+
+Desviación estandar, promedio, mediana, máximo y mínimo.
+
+```{r casos_activos_sd}
+sd(casos_activos$Casos.Confirmados)
+mean(casos_activos$Casos.Confirmados)
+median(casos_activos$Casos.Confirmados)
+max(casos_activos$Casos.Confirmados)
+min(casos_activos$Casos.Confirmados)
+```
+
+### Comuna de Talca
+
+Gráfico que muestra los casos confirmados durante el año 2020 en la comuna de Talca.
+
+```{r casos_activos_graf_talca}
+
+ggplot(data = casos_activos_talca, aes(x = Fecha, y = Casos.Confirmados, group = Comuna, colour = Comuna)) +
+  geom_line() +
+  scale_x_date(date_breaks = "1 month", date_minor_breaks = "1 week", date_labels = "%d-%m-%Y") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  labs(title = "Casos confirmados por fecha. Talca",
+    subtitle = paste0("Datos registrados durante el 2020."),
+    x = "Fecha del registro",
+    y = "Casos confirmados")
+```
+
+Desviación estandar, promedio, mediana, máximo y mínimo.
+
+```{r casos_activos_sd_talca}
+sd(casos_activos_talca$Casos.Confirmados)
+mean(casos_activos_talca$Casos.Confirmados)
+median(casos_activos_talca$Casos.Confirmados)
+max(casos_activos_talca$Casos.Confirmados)
+min(casos_activos_talca$Casos.Confirmados)
+```
+
+### Comunas con poblaciones similares a la de Talca
+
+Gráfico que muestra los casos confirmados durante el año 2020 en comunas con poblaciones similares a la de Talca.
+
+```{r casos_activos_graf_poblacion}
+
+ggplot(data = casos_activos_poblacion, aes(x = Fecha, y = Casos.Confirmados, group = Comuna, colour = Comuna)) +
+  geom_line() +
+  scale_x_date(date_breaks = "1 month", date_minor_breaks = "1 week", date_labels = "%d-%m-%Y") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  labs(title = "Casos confirmados por fecha. Comunas con poblaciones similares a Talca",
+    subtitle = paste0("Datos registrados durante el 2020."),
+    x = "Fecha del registro",
+    y = "Casos confirmados")
+```
+
+Desviación estandar, promedio, mediana, máximo y mínimo.
+
+```{r casos_activos_sd_poblacion}
+sd(casos_activos_poblacion$Casos.Confirmados)
+mean(casos_activos_poblacion$Casos.Confirmados)
+median(casos_activos_poblacion$Casos.Confirmados)
+max(casos_activos_poblacion$Casos.Confirmados)
+min(casos_activos_poblacion$Casos.Confirmados)
+```
+
+### Comunas cercanas a la de Talca
+
+Gráfico que muestra los casos confirmados durante el año 2020 en comunas cercanas a la de Talca.
+
+```{r casos_activos_graf_cercano}
+
+ggplot(data = casos_activos_cercano, aes(x = Fecha, y = Casos.Confirmados, group = Comuna, colour = Comuna)) +
+  geom_line() +
+  scale_x_date(date_breaks = "1 month", date_minor_breaks = "1 week", date_labels = "%d-%m-%Y") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  labs(title = "Casos confirmados por fecha. Comunas cercanas a Talca",
+    subtitle = paste0("Datos registrados durante el 2020."),
+    x = "Fecha del registro",
+    y = "Casos confirmados")
+```
+
+Desviación estandar, promedio, mediana, máximo y mínimo.
+
+```{r casos_activos_sd_cercano}
+sd(casos_activos_cercano$Casos.Confirmados)
+mean(casos_activos_cercano$Casos.Confirmados)
+median(casos_activos_cercano$Casos.Confirmados)
+max(casos_activos_cercano$Casos.Confirmados)
+min(casos_activos_cercano$Casos.Confirmados)
+```
+
+## Conclusiones
+
+En base a los resultados calculados, se puede afirmar que la comuna de Talca tuvo un aumento menor que el de otras comunas con poblaciones similares, pero mayor en comparación a comunas cercanas.
+
+A pesar de que ninguna de las comunas cercanas tiene poblaciones similares a la de Talca, se asume que producto de su cercanía geográfica, poblaciones considerablemente menores y el hecho de que Talca es la capital regional, existe un gran flujo de personas entre las comunas.
+
+Esta última situación podría explicar que las comunas de Maule, San Clemente y Pencahue tienen aumentos superiores al resto dado que colindan directamente con Talca.
+
+El hecho de que la comuna de Talca haya tenido un aumento menor que otras comunas con problaciones similares, puede se producto de que muchas de estas comunas pertenecen a la Región Metropolitana, donde existe un alto flujo de personas entre comunas con altas poblaciones.
